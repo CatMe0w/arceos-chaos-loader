@@ -6,7 +6,7 @@ align 4
     dd 0x00000001              ; flags = 1 (request memory info)
     ; Checksum (magic + flags + checksum = 0)
     dd -(0x1BADB002 + 0x00000001)
-    
+
 section .text
 global _loader_start
 
@@ -56,25 +56,23 @@ _loader_start:
     ; 4. Set up a 4-level paging structure
     call setup_paging
 
-    ; 5. Enable PAE and long mode
-    ; Enable PAE-compatible page structures
-    ; (Assumes a simple 1:1 mapping for low addresses and high mappings)
+    ; 5. Enable PAE
     mov eax, cr4
     or eax, 0x20        ; CR4.PAE = 1
     mov cr4, eax
 
-    ; Enable long mode
+    ; 6. Enable long mode
     mov ecx, 0xC0000080 ; IA32_EFER MSR
     rdmsr
     or eax, 0x100       ; Set LME (Long Mode Enable) bit
     wrmsr
 
-    ; Enable paging
+    ; 7. Enable paging
     mov eax, cr0
     or eax, 0x80000000  ; CR0.PG = 1
     mov cr0, eax
 
-    ; 6. Into 64-bit code segment
+    ; 8. Into 64-bit code segment
     jmp 0x08:long_mode_entry
 
 hang:
@@ -282,10 +280,10 @@ long_mode_entry:
     mov ss, ax
     ; XXX: Looks like this code snippet above can be removed
 
-    ; 7. Hello, ArceOS!
+    ; Hello, ArceOS!
     mov rax, 0xffffff8000200000
     jmp rax
-    ; FIXME: A page fault will occur here and fail to jump to the kernel, the target address doesn't exist
+    ; FIXME: ArceOS dies at its lgdt instruction (0xffffff8000200028). Our GDT is broken?
 
 ; -------------------------------
 ; Data and paging structures
@@ -306,7 +304,7 @@ gdt_data_end:
 
 ; IDT: Empty (placeholder, will do nothing, let it reset if interrupts occur)
 idt_data:
-    times 256 dq 0      ; 256 empty entries
+    times 256 dq 0        ; 256 empty entries
 idt_descriptor:
     dw (idt_data_end - idt_data - 1)
     dd idt_data
@@ -321,9 +319,7 @@ pml4_table: resq 512
 ; For high addresses (kernel)
 pdp_table: resq 512
 pd_table: resq 512
-
-; Map many pages (64 MB) for the kernel
-pt_table: resq 32 * 512 * 8
+pt_table: resq 32 * 512 * 8 ; Map many pages (64 MB) for the kernel
 
 ; For low addresses (loader)
 pdp_table_low: resq 512
