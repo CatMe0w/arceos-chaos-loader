@@ -166,11 +166,28 @@ setup_paging:
 
     ; PT[0] = kernel_phys_base | 0x03
     ; load the kernel physical address from .bss
-    mov eax, [kernel_phys_base] ; only 32 bits stored
-    mov edx, 0
-    or  eax, 0x3
-    mov dword [pt_table + (0 * 8)], eax
-    mov dword [pt_table + (0 * 8) + 4], edx
+    ; mov eax, [kernel_phys_base] ; only 32 bits stored
+    ; mov edx, 0
+    ; or  eax, 0x3
+    ; mov dword [pt_table + (0 * 8)], eax
+    ; mov dword [pt_table + (0 * 8) + 4], edx
+
+    ; We'll map 1MB for the kernel
+    ; PT[0] = kernel_phys_base | 0x03
+    ; PT[...] = kernel_phys_base + ...
+    ; PT[255] = kernel_phys_base + 1MB | 0x03
+    mov ecx, 256                ; We need 256 pages (1MB)
+    mov eax, [kernel_phys_base] ; Only 32 bits stored
+    mov edi, pt_table
+
+.fill_kernel_pt:
+    mov ebx, eax
+    or ebx, 0x3
+    mov [edi], ebx
+    mov dword [edi + 4], 0
+    add eax, 0x1000             ; Next page
+    add edi, 8                  ; Next PT entry
+    loop .fill_kernel_pt
 
     ; 3. IDENTITY-MAP the Loader @ 0x00100000
     ;    We'll do PML4[0], PDP[0], PD[0], PT[256]
