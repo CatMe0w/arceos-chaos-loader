@@ -27,9 +27,11 @@ _loader_start:
     cmp edi, 0          ; mods_count > 0?
     je hang             ; Halt if no modules are loaded
 
-    ; Read module (ArceOS kernel) start and end addresses
+    ; Read module (ArceOS kernel) start address
     mov edx, [esi]      ; mod_start (physical start of kernel)
     ; FIXME: We load a whole unparsed ELF file, a parser is needed!!
+    ; TODO workaround: edx will be 0x109000 (physical address) and first executable code is at 0x10a000 (phy. address)
+    ; so at this moment we will simply +0x1000 to get the first executable code
 
     ; Store mod_start as the kernel physical base address
     ; (we'll map this to 0xFFFFFF8000200000 later)
@@ -154,15 +156,15 @@ setup_paging:
     mov dword [pd_table + (1 * 8)], eax
     mov dword [pd_table + (1 * 8) + 4], edx
 
-    ; PT[0] = kernel_phys_base + 0x3
+    ; PT[0] = kernel_phys_base | 0x03
     ; load the kernel physical address from .bss
     mov eax, [kernel_phys_base] ; only 32 bits stored
     mov edx, 0
-    or  eax, 0x3                ; Present + RW
+    or  eax, 0x3
     mov dword [pt_table + (0 * 8)], eax
     mov dword [pt_table + (0 * 8) + 4], edx
 
-    ; 3) IDENTITY-MAP the Loader @ 0x00100000
+    ; 3. IDENTITY-MAP the Loader @ 0x00100000
     ;    We'll do PML4[0], PDP[0], PD[0], PT[256]
 
     ; Zero out pdp_table_low, pd_table_low, pt_table_low
@@ -219,7 +221,7 @@ setup_paging:
     mov dword [pt_table_low + (256 * 8)], eax
     mov dword [pt_table_low + (256 * 8) + 4], edx
 
-    ; 4) LOAD pml4_table into CR3
+    ; 4. LOAD pml4_table into CR3
     mov eax, pml4_table
     mov cr3, eax
 
@@ -238,7 +240,7 @@ long_mode_entry:
     mov ss, ax
     ; XXX: Looks like this code snippet above can be removed
 
-    ; (7) Hello, ArceOS!
+    ; 7. Hello, ArceOS!
     mov rax, 0xffffff8000200000
     jmp rax
     ; FIXME: A page fault will occur here and fail to jump to the kernel, the target address doesn't exist
@@ -255,7 +257,6 @@ gdt_data:
     dq 0x0000000000000000 ; NULL descriptor
     dq 0x00AF9A000000FFFF ; Code descriptor (64-bit)
     dq 0x00CF92000000FFFF ; Data descriptor (32-bit)
-
 gdt_descriptor:
     dw (gdt_data_end - gdt_data - 1)
     dd gdt_data
