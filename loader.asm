@@ -298,7 +298,7 @@ align 16
 gdt_data:
     dq 0x0000000000000000 ; NULL descriptor
     dq 0x00AF9A000000FFFF ; Code descriptor (64-bit)
-    dq 0x00CF92000000FFFF ; Data descriptor (32-bit)
+    dq 0x00AF92000000FFFF ; Data descriptor (64-bit)
 gdt_descriptor:
     dw (gdt_data_end - gdt_data - 1)
     dd gdt_data
