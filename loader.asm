@@ -131,9 +131,16 @@ setup_paging:
     ; 2. MAP KERNEL: 0xFFFFFF8000200000 -> kernel_phys_base
     ;    We'll use these indices:
     ;      PML4[511] -> PDP
-    ;      PDP[510]  -> PD
+    ;      PDP[0]    -> PD
     ;      PD[1]     -> PT
     ;      PT[0]     -> kernel_phys_base
+    ;    To get this:
+    ;      va = 0xFFFFFF8000200000
+    ;      pml4_index = (va >> 39) & 0x1FF = 511
+    ;      pdp_index  = (va >> 30) & 0x1FF = 0
+    ;      pd_index   = (va >> 21) & 0x1FF = 1
+    ;      pt_index   = (va >> 12) & 0x1FF = 0
+    ;      offset     = va & 0xFFF = 0
 
     ; PML4[511] = &pdp_table | 0x03 (Present + RW)
     mov eax, pdp_table  ; low 32 bits of address
@@ -142,12 +149,12 @@ setup_paging:
     mov dword [pml4_table + (511 * 8)], eax
     mov dword [pml4_table + (511 * 8) + 4], edx
 
-    ; PDP[510] = &pd_table | 0x03
+    ; PDP[0] = &pd_table | 0x03
     mov eax, pd_table
     mov edx, 0
     or  eax, 0x3
-    mov dword [pdp_table + (510 * 8)], eax
-    mov dword [pdp_table + (510 * 8) + 4], edx
+    mov dword [pdp_table + (0 * 8)], eax
+    mov dword [pdp_table + (0 * 8) + 4], edx
 
     ; PD[1] = &pt_table | 0x03
     mov eax, pt_table
