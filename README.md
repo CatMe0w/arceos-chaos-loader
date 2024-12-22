@@ -53,6 +53,7 @@ parted disk_bochs.img --script mkpart primary fat32 1MiB 100%
 
 # Mount the loop device, format, and copy the kernel
 sudo losetup -fP disk_bochs.img
+# Your loop device may vary, check with `losetup -a`
 sudo mkfs.fat -F 32 /dev/loop0p1
 sudo mount /dev/loop0p1 /mnt
 sudo mkdir -p /mnt/boot/grub2
