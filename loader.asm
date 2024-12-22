@@ -122,7 +122,7 @@ setup_paging:
 
     ; Clear PT
     mov edi, pt_table
-    mov ecx, 512
+    mov ecx, 512 * 32
 .zero_pt:
     mov dword [edi], eax
     mov dword [edi + 4], eax
@@ -157,37 +157,54 @@ setup_paging:
     mov dword [pdp_table + (0 * 8)], eax
     mov dword [pdp_table + (0 * 8) + 4], edx
 
-    ; PD[1] = &pt_table | 0x03
-    mov eax, pt_table
-    mov edx, 0
-    or  eax, 0x3
-    mov dword [pd_table + (1 * 8)], eax
-    mov dword [pd_table + (1 * 8) + 4], edx
+    ; Map 64 MB for the kernel
+    ; 32 PD entries (32 * 2MB = 64MB), with 512 PT entries each (512 * 4KB = 2MB)
 
-    ; PT[0] = kernel_phys_base | 0x03
-    ; load the kernel physical address from .bss
-    ; mov eax, [kernel_phys_base] ; only 32 bits stored
-    ; mov edx, 0
-    ; or  eax, 0x3
-    ; mov dword [pt_table + (0 * 8)], eax
-    ; mov dword [pt_table + (0 * 8) + 4], edx
+    ; Load the kernel physical address from .bss
+    mov ebx, [kernel_phys_base]
 
-    ; We'll map 1MB for the kernel
+    lea edi, [pd_table + 8]     ; Skip 1 PD entry
+    mov esi, pt_table
+    mov ecx, 32
+.fill_kernel_pd:
+    mov eax, esi
+    or eax, 0x3
+    mov [edi], eax
+    mov dword [edi + 4], 0
+    add esi, 0x1000             ; Next PT
+    add edi, 8                  ; Next PD entry
+    loop .fill_kernel_pd
+
+    ; For each PD entry:
     ; PT[0] = kernel_phys_base | 0x03
     ; PT[...] = kernel_phys_base + ...
-    ; PT[255] = kernel_phys_base + 1MB | 0x03
-    mov ecx, 256                ; We need 256 pages (1MB)
-    mov eax, [kernel_phys_base] ; Only 32 bits stored
-    mov edi, pt_table
-
+    ; PT[511] = kernel_phys_base + 511 * 4KB | 0x03
+    xor edi, edi                ; i = 0
+    mov edx, 32                 ; 32 PD entries
 .fill_kernel_pt:
-    mov ebx, eax
-    or ebx, 0x3
-    mov [edi], ebx
-    mov dword [edi + 4], 0
+    push edx
+
+    mov eax, pt_table
+    add eax, edi
+    mov esi, eax                ; PT[i]
+
+    mov eax, ebx
+    add eax, edi                ; kernel_phys_base + (i * 2MB)
+
+    mov ecx, 512
+.fill_kernel_pt_inner:
+    mov ebp, eax
+    or ebp, 0x3
+    mov [esi], ebp
+    mov dword [esi + 4], 0
     add eax, 0x1000             ; Next page
-    add edi, 8                  ; Next PT entry
-    loop .fill_kernel_pt
+    add esi, 8                  ; Next PT entry
+    loop .fill_kernel_pt_inner
+
+    add edi, 0x1000             ; Next 2MB
+    pop edx
+    dec edx
+    jnz .fill_kernel_pt
 
     ; 3. IDENTITY-MAP the Loader @ 0x00100000
     ;    We'll do PML4[0], PDP[0], PD[0], PT[256]
@@ -301,22 +318,16 @@ align 4096
 ; Top-level PML4 table
 pml4_table: resq 512
 
-; Second-level PDP table (for high addresses)
+; For high addresses (kernel)
 pdp_table: resq 512
-
-; Third-level PD table (for high addresses)
 pd_table: resq 512
 
-; Fourth-level PT table (for high addresses)
-pt_table: resq 512
+; Map many pages (64 MB) for the kernel
+pt_table: resq 32 * 512 * 8
 
-; Second-level PDP table (for low addresses)
+; For low addresses (loader)
 pdp_table_low: resq 512
-
-; Third-level PD table (for low addresses)
 pd_table_low: resq 512
-
-; Fourth-level PT table (for low addresses)
 pt_table_low: resq 512
 
 ; Kernel physical base (set by loader)
