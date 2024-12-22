@@ -29,9 +29,10 @@ _loader_start:
 
     ; Read module (ArceOS kernel) start address
     mov edx, [esi]      ; mod_start (physical start of kernel)
-    ; FIXME: We load a whole unparsed ELF file, a parser is needed!!
-    ; TODO workaround: edx will be 0x109000 (physical address) and first executable code is at 0x10a000 (phy. address)
-    ; so at this moment we will simply +0x1000 to get the first executable code
+
+    ; Workaround: edx will be 0x109000 (physical address) and first executable code is at 0x10a000 (phy. address)
+    ; At this moment we will simply +0x1000 to get the first executable code
+    add edx, 0x1000
 
     ; Store mod_start as the kernel physical base address
     ; (we'll map this to 0xFFFFFF8000200000 later)
