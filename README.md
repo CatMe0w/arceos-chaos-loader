@@ -29,8 +29,11 @@ C:\path\to\bochsdbg.exe -f .\bochsrc
 Requires `nasm` and `make`.
 
 ```bash
+# Make Chaos Loader
 cd /path/to/arceos-chaos-loader/
 make
+
+# Make ArceOS Hypervisor
 cd /path/to/arceos-umhv/arceos-vmm/
 make ACCEL=y ARCH=x86_64 [LOG=warn|info|debug|trace] VM_CONFIGS=/PATH/TO/CONFIG/FILE run
 # Follow arceos-umhv/README.md for more details
@@ -67,7 +70,7 @@ sudo losetup -d /dev/loop0
 
 ### Example `grub.cfg`
 
-```cfg
+```
 set default=0
 set timeout=30
 menuentry "ArceOS" {
@@ -78,9 +81,7 @@ menuentry "ArceOS" {
 
 ### Example `bochsrc`
 
-Set the path to the disk image in `bochsrc`:
-
-```cfg
+```
 megs: 128
 cpu: count=1
 ata0-master: type=disk, path="disk_bochs.img", mode=flat, translation=lba
@@ -97,6 +98,25 @@ display_library: x, options="gui_debug"
 
 ```bash
 bochs -f bochsrc
+```
+
+### Update an existing disk image
+
+```bash
+# Make the new kernel
+cd /path/to/arceos-umhv/arceos-vmm/
+make ACCEL=y ARCH=x86_64 [LOG=warn|info|debug|trace] VM_CONFIGS=/PATH/TO/CONFIG/FILE run
+
+# Mount the loop device
+sudo losetup -fP disk_bochs.img
+sudo mount /dev/loop0p1 /mnt
+
+# Copy the new kernel
+sudo cp /path/to/arceos-vmm_x86_64-qemu-q35.elf /mnt/boot/kernel.elf
+
+# Unmount the loop device
+sudo umount /mnt
+sudo losetup -d /dev/loop0
 ```
 
 ## License
