@@ -297,18 +297,20 @@ gdt_data:
     dq 0x0000000000000000 ; NULL descriptor
     dq 0x00AF9A000000FFFF ; Code descriptor (64-bit)
     dq 0x00AF92000000FFFF ; Data descriptor (64-bit)
+gdt_data_end:
+
 gdt_descriptor:
     dw (gdt_data_end - gdt_data - 1)
     dd gdt_data
-gdt_data_end:
 
 ; IDT: Empty (placeholder, will do nothing, let it reset if interrupts occur)
 idt_data:
     times 256 dq 0        ; 256 empty entries
+idt_data_end:
+
 idt_descriptor:
     dw (idt_data_end - idt_data - 1)
     dd idt_data
-idt_data_end:
 
 section .bss
 align 4096
