@@ -271,19 +271,11 @@ setup_paging:
 [bits 64]
 long_mode_entry:
     ; Now we are in 64-bit long mode (in a 64-bit code segment)
-    ; Reload 64-bit segment selectors:
-    mov ax, 0x10      ; 64-bit data segment
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
-    mov ss, ax
-    ; XXX: Looks like this code snippet above can be removed
 
     ; Hello, ArceOS!
+    mov edi, 0x2BADB002        ; set multiboot magic, rust_entry() expects this
     mov rax, 0xffffff8000200000
     jmp rax
-    ; FIXME: ArceOS dies at its lgdt instruction (0xffffff8000200028). Our GDT is broken?
 
 ; -------------------------------
 ; Data and paging structures
