@@ -272,10 +272,42 @@ setup_paging:
 long_mode_entry:
     ; Now we are in 64-bit long mode (in a 64-bit code segment)
 
+    mov edi, 0x2BADB002 ; set multiboot magic, rust_entry() expects this
+    mov esi, 0          ; clear multiboot info, as current ArceOS doesn't use it
+
+    ; Mock bsp_entry32
+    ; Copied from /arceos/modules/axhal/src/platform/x86_pc/multiboot.S
+    lgdt [gdt_mock_descriptor]
+    ; set data segment selectors
+    mov     ax, 0x18
+    mov     ss, ax
+    mov     ds, ax
+    mov     es, ax
+    mov     fs, ax
+    mov     gs, ax
+
+    ; set PAE, PGE bit in CR4
+    ; mov     eax, {cr4}
+    ; mov     cr4, eax
+
+    ; load the temporary page table
+    ; lea     eax, [.Ltmp_pml4 - {offset}]
+    ; mov     cr3, eax
+
+    ; set LME, NXE bit in IA32_EFER
+    ; mov     ecx, {efer_msr}
+    ; mov     edx, 0
+    ; mov     eax, {efer}
+    ; wrmsr
+
+    ; set protected mode, write protect, paging bit in CR0
+    ; mov     eax, {cr0}
+    ; mov     cr0, eax
+
     ; Hello, ArceOS!
-    mov edi, 0x2BADB002        ; set multiboot magic, rust_entry() expects this
-    mov rax, 0xffffff8000200000
+    mov rax, 0xffffff80002000b7 ; bsp_entry64
     jmp rax
+    ; FIXME: ArceOS dies at init_memory_management(), the new page table set up by rust part is broken
 
 ; -------------------------------
 ; Data and paging structures
@@ -288,12 +320,49 @@ align 16
 gdt_data:
     dq 0x0000000000000000 ; NULL descriptor
     dq 0x00AF9A000000FFFF ; Code descriptor (64-bit)
-    dq 0x00AF92000000FFFF ; Data descriptor (64-bit)
+    dq 0x00CF92000000FFFF ; Data descriptor (32-bit)
+    dq 0x00CF9A000000FFFF ; Code descriptor (32-bit)
 gdt_data_end:
 
 gdt_descriptor:
     dw (gdt_data_end - gdt_data - 1)
     dd gdt_data
+
+; bsp_entry32 GDT and paging structures
+; Copied from /arceos/modules/axhal/src/platform/x86_pc/multiboot.S
+gdt_mock_data:
+    dq 0x0000000000000000
+    dq 0x00cf9b000000ffff
+    dq 0x00af9b000000ffff
+    dq 0x00cf93000000ffff
+gdt_mock_data_end:
+
+gdt_mock_descriptor:
+    dw (gdt_mock_data_end - gdt_mock_data - 1)
+    dd gdt_mock_data
+
+; align 4096
+; Ltmp_pml4:
+;     # 0x0000_0000 ~ 0xffff_ffff
+;     .quad .Ltmp_pdpt_low - {offset} + 0x3   # PRESENT | WRITABLE | paddr(tmp_pdpt)
+;     .zero 8 * 255
+;     # 0xffff_8000_0000_0000 ~ 0xffff_8000_ffff_ffff
+;     .quad .Ltmp_pdpt_high - {offset} + 0x3  # PRESENT | WRITABLE | paddr(tmp_pdpt)
+;     .zero 8 * 255
+
+; Ltmp_pdpt_low:
+;     .quad 0x0000 | 0x83         # PRESENT | WRITABLE | HUGE_PAGE | paddr(0x0)
+;     .quad 0x40000000 | 0x83     # PRESENT | WRITABLE | HUGE_PAGE | paddr(0x4000_0000)
+;     .quad 0x80000000 | 0x83     # PRESENT | WRITABLE | HUGE_PAGE | paddr(0x8000_0000)
+;     .quad 0xc0000000 | 0x83     # PRESENT | WRITABLE | HUGE_PAGE | paddr(0xc000_0000)
+;     .zero 8 * 508
+
+; Ltmp_pdpt_high:
+;     .quad 0x0000 | 0x83         # PRESENT | WRITABLE | HUGE_PAGE | paddr(0x0)
+;     .quad 0x40000000 | 0x83     # PRESENT | WRITABLE | HUGE_PAGE | paddr(0x4000_0000)
+;     .quad 0x80000000 | 0x83     # PRESENT | WRITABLE | HUGE_PAGE | paddr(0x8000_0000)
+;     .quad 0xc0000000 | 0x83     # PRESENT | WRITABLE | HUGE_PAGE | paddr(0xc000_0000)
+;     .zero 8 * 508
 
 ; IDT: Empty (placeholder, will do nothing, let it reset if interrupts occur)
 idt_data:
