@@ -35,7 +35,7 @@ make
 
 # Make ArceOS Hypervisor
 cd /path/to/arceos-umhv/arceos-vmm/
-make ACCEL=y ARCH=x86_64 [LOG=warn|info|debug|trace] VM_CONFIGS=/PATH/TO/CONFIG/FILE run
+make ACCEL=y ARCH=x86_64 [LOG=warn|info|debug|trace] VM_CONFIGS=/PATH/TO/CONFIG/FILE build
 # Follow arceos-umhv/README.md for more details
 ```
 
@@ -73,7 +73,7 @@ sudo losetup -d /dev/loop0
 
 ```
 set default=0
-set timeout=30
+set timeout=5
 menuentry "ArceOS" {
     multiboot /boot/loader.elf
     module /boot/kernel.elf
@@ -106,10 +106,11 @@ bochs -f bochsrc
 ```bash
 # Make the new kernel
 cd /path/to/arceos-umhv/arceos-vmm/
-make ACCEL=y ARCH=x86_64 [LOG=warn|info|debug|trace] VM_CONFIGS=/PATH/TO/CONFIG/FILE run
+make ACCEL=y ARCH=x86_64 [LOG=warn|info|debug|trace] VM_CONFIGS=/PATH/TO/CONFIG/FILE build
 
 # Mount the loop device
 sudo losetup -fP disk_bochs.img
+# Your loop device may vary, check with `losetup -a`
 sudo mount /dev/loop0p1 /mnt
 
 # Copy the new kernel
