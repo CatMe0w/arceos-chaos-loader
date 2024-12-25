@@ -11,13 +11,9 @@ section .text
 global _loader_start
 
 _loader_start:
-    ; 0. Verify multiboot magic
+    ; 1. Verify multiboot magic
     cmp eax, 0x2BADB002
     jne hang            ; Halt if magic is incorrect
-
-    ; 1. Save stack pointer and general-purpose registers
-    mov ebp, esp        ; Save stack pointer
-    pushad              ; Save general-purpose registers
 
     ; 2. Extract module information from multiboot_info
     mov edi, [ebx + 20] ; mods_count (number of modules)
