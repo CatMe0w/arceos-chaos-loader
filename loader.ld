@@ -9,16 +9,22 @@ SECTIONS
     {
         *(.multiboot)
         *(.text)
-    }
+    } :code
 
     .data :
     {
         *(.data)
-    }
+    } :data
 
     .bss :
     {
         *(.bss)
         *(COMMON)
-    }
+    } :data
+}
+
+PHDRS
+{
+    code PT_LOAD FLAGS(5); /* RX */
+    data PT_LOAD FLAGS(6); /* RW */
 }
