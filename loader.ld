@@ -7,9 +7,13 @@ SECTIONS
 
     .text :
     {
-        *(.multiboot)
         *(.text)
     } :code
+
+    .rodata :
+    {
+        *(.multiboot)
+    } :rodata
 
     .data :
     {
@@ -19,12 +23,12 @@ SECTIONS
     .bss :
     {
         *(.bss)
-        *(COMMON)
     } :data
 }
 
 PHDRS
 {
-    code PT_LOAD FLAGS(5); /* RX */
-    data PT_LOAD FLAGS(6); /* RW */
+    code PT_LOAD FLAGS(5);   /* RX */
+    data PT_LOAD FLAGS(6);   /* RW */
+    rodata PT_LOAD FLAGS(4); /* R */
 }

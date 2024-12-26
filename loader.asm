@@ -1,12 +1,3 @@
-section .multiboot
-align 4
-    ; Multiboot magic number
-    dd 0x1BADB002              ; magic
-    ; Flags (request memory map from GRUB)
-    dd 0x00000001              ; flags = 1 (request memory info)
-    ; Checksum (magic + flags + checksum = 0)
-    dd -(0x1BADB002 + 0x00000001)
-
 section .text
 global _loader_start
 
@@ -308,6 +299,16 @@ long_mode_entry:
 ; -------------------------------
 ; Data and paging structures
 ; -------------------------------
+
+; Multiboot header
+section .multiboot
+align 4
+    ; Multiboot magic number
+    dd 0x1BADB002              ; magic
+    ; Flags (request memory map from GRUB)
+    dd 0x00000001              ; flags = 1 (request memory info)
+    ; Checksum (magic + flags + checksum = 0)
+    dd -(0x1BADB002 + 0x00000001)
 
 section .data
 align 16
