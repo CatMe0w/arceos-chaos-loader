@@ -142,10 +142,6 @@ setup_paging:
     mov dword [pdp_table + (0 * 8)], eax
     mov dword [pdp_table + (0 * 8) + 4], edx
 
-
-    ; Load the kernel physical address from .bss
-    mov ebx, [kernel_phys_base]
-
     ; Map 32 MB for the kernel
     ; 16 PD entries (16 * 2MB = 32MB), with 512 PT entries each (512 * 4KB = 2MB)
     lea edi, [pd_table + 8]     ; Skip 1 PD entry
@@ -165,6 +161,7 @@ setup_paging:
     ; PT[...] = kernel_phys_base + ...
     ; PT[511] = kernel_phys_base + 511 * 4KB | 0x03
     xor edi, edi                ; i = 0
+    xor ebx, ebx                ; physical address offset
     mov edx, 16                 ; 16 PD entries
 .fill_kernel_pt:
     push edx
@@ -173,8 +170,8 @@ setup_paging:
     add eax, edi
     mov esi, eax                ; PT[i]
 
-    mov eax, ebx
-    add eax, edi                ; kernel_phys_base + (i * 2MB)
+    mov eax, [kernel_phys_base]
+    add eax, ebx                ; kernel_phys_base + (i * 2MB)
 
     mov ecx, 512
 .fill_kernel_pt_inner:
@@ -186,7 +183,8 @@ setup_paging:
     add esi, 8                  ; Next PT entry
     loop .fill_kernel_pt_inner
 
-    add edi, 0x1000             ; Next 2MB
+    add edi, 0x1000             ; Next 4KB for PD entry
+    add ebx, 0x200000           ; Next 2MB for physical address offset
     pop edx
     dec edx
     jnz .fill_kernel_pt
