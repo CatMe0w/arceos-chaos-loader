@@ -107,7 +107,7 @@ setup_paging:
 
     ; Clear PT
     mov edi, pt_table
-    mov ecx, 512 * 32
+    mov ecx, 512 * 16
 .zero_pt:
     mov dword [edi], eax
     mov dword [edi + 4], eax
@@ -142,15 +142,15 @@ setup_paging:
     mov dword [pdp_table + (0 * 8)], eax
     mov dword [pdp_table + (0 * 8) + 4], edx
 
-    ; Map 64 MB for the kernel
-    ; 32 PD entries (32 * 2MB = 64MB), with 512 PT entries each (512 * 4KB = 2MB)
 
     ; Load the kernel physical address from .bss
     mov ebx, [kernel_phys_base]
 
+    ; Map 32 MB for the kernel
+    ; 16 PD entries (16 * 2MB = 32MB), with 512 PT entries each (512 * 4KB = 2MB)
     lea edi, [pd_table + 8]     ; Skip 1 PD entry
     mov esi, pt_table
-    mov ecx, 32
+    mov ecx, 16
 .fill_kernel_pd:
     mov eax, esi
     or eax, 0x3
@@ -165,7 +165,7 @@ setup_paging:
     ; PT[...] = kernel_phys_base + ...
     ; PT[511] = kernel_phys_base + 511 * 4KB | 0x03
     xor edi, edi                ; i = 0
-    mov edx, 32                 ; 32 PD entries
+    mov edx, 16                 ; 16 PD entries
 .fill_kernel_pt:
     push edx
 
@@ -379,7 +379,7 @@ pml4_table: resq 512
 ; For high addresses (kernel)
 pdp_table: resq 512
 pd_table: resq 512
-pt_table: resq 32 * 512 * 8 ; Map many pages (64 MB) for the kernel
+pt_table: resq 16 * 512 * 8 ; Map many pages (32 MB) for the kernel
 
 ; For low addresses (loader)
 pdp_table_low: resq 512
@@ -388,3 +388,6 @@ pt_table_low: resq 512
 
 ; Kernel physical base (set by loader)
 kernel_phys_base: resd 1
+
+; Don't ask
+magic_padding: resb 487424
