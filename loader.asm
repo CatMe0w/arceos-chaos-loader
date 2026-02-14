@@ -45,18 +45,18 @@ _loader_start:
 
     ; 5. Enable PAE
     mov eax, cr4
-    or eax, 0x20        ; CR4.PAE = 1
+    or eax, 0xA0        ; CR4.PAE | CR4.PGE
     mov cr4, eax
 
     ; 6. Enable long mode
     mov ecx, 0xC0000080 ; IA32_EFER MSR
     rdmsr
-    or eax, 0x100       ; Set LME (Long Mode Enable) bit
+    or eax, 0x900       ; EFER.LME | EFER.NXE
     wrmsr
 
     ; 7. Enable paging
     mov eax, cr0
-    or eax, 0x80000000  ; CR0.PG = 1
+    or eax, 0x80010000  ; CR0.PG | CR0.WP
     mov cr0, eax
 
     ; 8. Into 64-bit code segment
