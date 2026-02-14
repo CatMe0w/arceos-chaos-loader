@@ -8,6 +8,9 @@ _loader_start:
     cmp eax, 0x2BADB002
     jne hang            ; Halt if magic is incorrect
 
+    ; We keep interrupts disabled until the kernel installs a valid IDT
+    cli
+
     ; 2. Extract module information from multiboot_info
     mov edi, [ebx + 20] ; mods_count (number of modules)
     mov esi, [ebx + 24] ; mods_addr (address of module descriptors)
@@ -364,8 +367,8 @@ setup_paging:
     dec edx
     jnz .fill_kernel_pt
 
-    ; 3. IDENTITY-MAP the Loader @ 0x00100000
-    ;    We'll do PML4[0], PDP[0], PD[0], PT[256]
+    ; 3. IDENTITY-MAP low memory for the loader (first 2MB).
+    ;    We'll do PML4[0], PDP[0], PD[0], and fill PT[0..511].
 
     ; Zero out pdp_table_low, pd_table_low, pt_table_low
     xor eax, eax
@@ -414,13 +417,19 @@ setup_paging:
     mov dword [pd_table_low + (0 * 8)], eax
     mov dword [pd_table_low + (0 * 8) + 4], edx
 
-    ; PT[256] = 0x00100000 | 0x3
-    ; (256 * 4K = 0x100000)
-    mov eax, 0x00100000
-    mov edx, 0
-    or  eax, 0x3
-    mov dword [pt_table_low + (256 * 8)], eax
-    mov dword [pt_table_low + (256 * 8) + 4], edx
+    ; IDENTITY-MAP the low 2MB so loader code/data/stack are all reachable
+    ; after entering long mode
+    mov eax, 0x00000000
+    mov edi, pt_table_low
+    mov ecx, 512
+.fill_pt_low:
+    mov ebx, eax
+    or  ebx, 0x3
+    mov dword [edi], ebx
+    mov dword [edi + 4], 0
+    add eax, 0x1000
+    add edi, 8
+    loop .fill_pt_low
 
     ; 4. LOAD pml4_table into CR3
     mov eax, pml4_table
@@ -465,10 +474,51 @@ long_mode_entry:
     ; mov     eax, {cr0}
     ; mov     cr0, eax
 
+    ; Resolve bsp_entry64 from loaded kernel code
+resolve_bsp_entry64:
+    ; Build canonical 64-bit _start VA from saved ELF e_entry
+    mov eax, [rel kernel_entry_low]
+    mov edx, [rel kernel_entry_high]
+    cmp edx, KERNEL_PHYS_VIRT_OFFSET_HI
+    jne hang
+    shl rdx, 32
+    or  rax, rdx
+    mov rsi, rax
+
+    ; _start usually jumps into bsp_entry32. Follow if present
+    cmp byte [rsi], 0xEB
+    je .follow_short
+    cmp byte [rsi], 0xE9
+    je .follow_near
+    jmp .scan_far
+
+.follow_short:
+    movsx rcx, byte [rsi + 1]
+    lea rsi, [rsi + rcx + 2]
+    jmp .scan_far
+
+.follow_near:
+    movsxd rcx, dword [rsi + 1]
+    lea rsi, [rsi + rcx + 5]
+
+    ; Find far jump (EA ptr16:32) in early bsp_entry32 code and use its 32-bit target
+.scan_far:
+    mov ecx, 512
+.find_far:
+    cmp byte [rsi], 0xEA
+    je .found
+    inc rsi
+    dec ecx
+    jnz .find_far
+    jmp hang
+
+.found:
+    mov eax, dword [rsi + 1]
+    mov edx, [rel kernel_entry_high]
+    shl rdx, 32
+    or  rax, rdx
     ; Hello, ArceOS!
-    mov rax, 0xffffff80002000b7 ; bsp_entry64
     jmp rax
-    ; FIXME: ArceOS dies at init_memory_management(), the new page table set up by rust part is broken
 
 ; -------------------------------
 ; Data and paging structures
