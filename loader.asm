@@ -438,7 +438,7 @@ long_mode_entry:
 
     ; Mock bsp_entry32
     ; Copied from /arceos/modules/axhal/src/platform/x86_pc/multiboot.S
-    lgdt [gdt_mock_descriptor]
+    lgdt [rel gdt_mock_descriptor]
     ; set data segment selectors
     mov     ax, 0x18
     mov     ss, ax
