@@ -193,6 +193,7 @@ setup_paging:
     ;    We'll do PML4[0], PDP[0], PD[0], PT[256]
 
     ; Zero out pdp_table_low, pd_table_low, pt_table_low
+    xor eax, eax
     mov edi, pdp_table_low
     mov ecx, 512
 .zero_pdp_low:
