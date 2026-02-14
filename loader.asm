@@ -1,6 +1,8 @@
 section .text
 global _loader_start
 
+KERNEL_PHYS_VIRT_OFFSET_HI equ 0xFFFFFF80 ; 0xffffff80_00000000 >> 32
+
 _loader_start:
     ; 1. Verify multiboot magic
     cmp eax, 0x2BADB002
@@ -14,16 +16,15 @@ _loader_start:
     cmp edi, 0          ; mods_count > 0?
     je hang             ; Halt if no modules are loaded
 
-    ; Read module (ArceOS kernel) start address
-    mov edx, [esi]      ; mod_start (physical start of kernel)
-
-    ; Workaround: edx will be 0x109000 (physical address) and first executable code is at 0x10a000 (phy. address)
-    ; At this moment we will simply +0x1000 to get the first executable code
-    add edx, 0x1000
-
-    ; Store mod_start as the kernel physical base address
-    ; (we'll map this to 0xFFFFFF8000200000 later)
-    mov dword [kernel_phys_base], edx
+    ; 2.1. Parse kernel module ELF64 Program Headers and load PT_LOAD segments
+    mov edx, [esi]      ; mod_start
+    mov ecx, [esi + 4]  ; mod_end
+    cmp ecx, edx
+    jbe hang
+    mov [kernel_mod_start], edx
+    sub ecx, edx
+    mov [kernel_mod_size], ecx
+    call load_kernel_elf64_segments
 
     ; 3. Set up a minimal GDT and IDT
     ; Load a minimal GDT
@@ -68,6 +69,180 @@ hang:
 hang_loop:
     hlt
     jmp hang_loop
+
+; ---------------------------
+; Load ELF64 PT_LOAD segments
+; ---------------------------
+; Input:
+;   [kernel_mod_start] = module start physical address
+;   [kernel_mod_size]  = module size in bytes
+; Output:
+;   [kernel_phys_base] = minimum physical load address among PT_LOAD segments
+load_kernel_elf64_segments:
+    pushad
+
+    mov esi, [kernel_mod_start]
+
+    ; ELF magic / class / endianness / machine checks
+    cmp dword [esi], 0x464C457F ; 0x7F 'E' 'L' 'F'
+    jne .error
+    cmp byte [esi + 4], 2       ; ELFCLASS64
+    jne .error
+    cmp byte [esi + 5], 1       ; little-endian
+    jne .error
+    cmp word [esi + 0x12], 0x3E ; EM_X86_64
+    jne .error
+
+    ; e_entry (must stay in the kernel higher-half region)
+    mov eax, [esi + 0x18]
+    mov edx, [esi + 0x1C]
+    cmp edx, KERNEL_PHYS_VIRT_OFFSET_HI
+    jne .error
+    mov [kernel_entry_low], eax
+    mov [kernel_entry_high], edx
+
+    ; e_phoff (must fit in 32 bits in this loader)
+    mov eax, [esi + 0x20]
+    mov edx, [esi + 0x24]
+    test edx, edx
+    jnz .error
+    mov [elf_phoff], eax
+
+    ; e_phentsize / e_phnum
+    movzx eax, word [esi + 0x36]
+    mov [elf_phentsize], eax
+    cmp eax, 56                 ; sizeof(Elf64_Phdr)
+    jb .error
+
+    movzx eax, word [esi + 0x38]
+    mov [elf_phnum], eax
+
+    ; Bounds-check: e_phoff + e_phnum * e_phentsize <= module size
+    mov eax, [elf_phnum]
+    mul dword [elf_phentsize]
+    test edx, edx
+    jnz .error
+    add eax, [elf_phoff]
+    jc .error
+    cmp eax, [kernel_mod_size]
+    ja .error
+
+    mov eax, [kernel_mod_start]
+    add eax, [elf_phoff]
+    mov [elf_phdr_ptr], eax
+
+    mov eax, [elf_phnum]
+    mov [elf_phnum_left], eax
+    mov dword [kernel_phys_base], 0xFFFFFFFF
+
+.ph_loop:
+    cmp dword [elf_phnum_left], 0
+    je .done
+
+    mov ebx, [elf_phdr_ptr]
+    cmp dword [ebx + 0x00], 1   ; PT_LOAD
+    jne .next_ph
+
+    ; p_offset (must fit in 32 bits)
+    mov eax, [ebx + 0x08]
+    mov edx, [ebx + 0x0C]
+    test edx, edx
+    jnz .error
+    mov [ph_offset], eax
+
+    ; p_paddr (high dword is either 0 or phys-virt offset high dword)
+    mov eax, [ebx + 0x18]
+    mov edx, [ebx + 0x1C]
+    mov [ph_paddr_low], eax
+    mov [ph_paddr_high], edx
+    cmp edx, 0
+    je .paddr_ok
+    cmp edx, KERNEL_PHYS_VIRT_OFFSET_HI
+    jne .error
+.paddr_ok:
+    mov [ph_dst], eax
+
+    ; p_filesz (must fit in 32 bits)
+    mov eax, [ebx + 0x20]
+    mov edx, [ebx + 0x24]
+    test edx, edx
+    jnz .error
+    mov [ph_filesz], eax
+
+    ; p_memsz:
+    ; - normal case: true size in low 32 bits, high == 0
+    ; - ArceOS percpu/bss case: encoded as end address with same high dword as p_paddr
+    mov eax, [ebx + 0x28]
+    mov edx, [ebx + 0x2C]
+    test edx, edx
+    jz .memsz_ready
+    cmp edx, [ph_paddr_high]
+    jne .error
+    cmp eax, [ph_paddr_low]
+    jb .error
+    sub eax, [ph_paddr_low]
+.memsz_ready:
+    mov [ph_memsz], eax
+
+    ; p_memsz must be >= p_filesz
+    mov eax, [ph_memsz]
+    cmp eax, [ph_filesz]
+    jb .error
+
+    ; Bounds-check source: p_offset + p_filesz <= module size
+    mov eax, [ph_offset]
+    add eax, [ph_filesz]
+    jc .error
+    cmp eax, [kernel_mod_size]
+    ja .error
+
+    ; Track minimum destination physical address
+    mov eax, [ph_dst]
+    cmp eax, [kernel_phys_base]
+    jae .keep_base
+    mov [kernel_phys_base], eax
+.keep_base:
+
+    ; Copy segment file bytes
+    mov esi, [kernel_mod_start]
+    add esi, [ph_offset]
+    mov edi, [ph_dst]
+    mov ecx, [ph_filesz]
+    mov edx, ecx
+    shr ecx, 2
+    rep movsd
+    mov ecx, edx
+    and ecx, 3
+    rep movsb
+
+    ; Zero-fill .bss tail: [p_filesz, p_memsz)
+    mov ecx, [ph_memsz]
+    sub ecx, [ph_filesz]
+    jz .next_ph
+    xor eax, eax
+    mov edx, ecx
+    shr ecx, 2
+    rep stosd
+    mov ecx, edx
+    and ecx, 3
+    rep stosb
+
+.next_ph:
+    mov eax, [elf_phdr_ptr]
+    add eax, [elf_phentsize]
+    mov [elf_phdr_ptr], eax
+    dec dword [elf_phnum_left]
+    jmp .ph_loop
+
+.done:
+    cmp dword [kernel_phys_base], 0xFFFFFFFF
+    je .error
+    popad
+    ret
+
+.error:
+    popad
+    jmp hang
 
 ; -------------------------------
 ; Set up 4-level paging structure
@@ -387,6 +562,23 @@ pt_table_low: resq 512
 
 ; Kernel physical base (set by loader)
 kernel_phys_base: resd 1
+
+; ELF loader state
+kernel_mod_start: resd 1
+kernel_mod_size:  resd 1
+kernel_entry_low: resd 1
+kernel_entry_high: resd 1
+elf_phoff:        resd 1
+elf_phentsize:    resd 1
+elf_phnum:        resd 1
+elf_phdr_ptr:     resd 1
+elf_phnum_left:   resd 1
+ph_offset:        resd 1
+ph_paddr_low:     resd 1
+ph_paddr_high:    resd 1
+ph_dst:           resd 1
+ph_filesz:        resd 1
+ph_memsz:         resd 1
 
 ; Don't ask
 magic_padding: resb 487424
