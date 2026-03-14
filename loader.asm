@@ -4,14 +4,14 @@ global _loader_start
 KERNEL_PHYS_VIRT_OFFSET_HI equ 0xFFFFFF80 ; 0xffffff80_00000000 >> 32
 
 _loader_start:
-    ; 1. Verify multiboot magic
+    ; Verify multiboot magic
     cmp eax, 0x2BADB002
     jne hang            ; Halt if magic is incorrect
 
     ; We keep interrupts disabled until the kernel installs a valid IDT
     cli
 
-    ; 2. Extract module information from multiboot_info
+    ; Extract module information from multiboot_info
     mov edi, [ebx + 20] ; mods_count (number of modules)
     mov esi, [ebx + 24] ; mods_addr (address of module descriptors)
 
@@ -19,7 +19,7 @@ _loader_start:
     cmp edi, 0          ; mods_count > 0?
     je hang             ; Halt if no modules are loaded
 
-    ; 2.1. Parse kernel module ELF64 Program Headers and load PT_LOAD segments
+    ; Parse kernel module ELF64 Program Headers and load PT_LOAD segments
     mov edx, [esi]      ; mod_start
     mov ecx, [esi + 4]  ; mod_end
     cmp ecx, edx
@@ -29,11 +29,8 @@ _loader_start:
     mov [kernel_mod_size], ecx
     call load_kernel_elf64_segments
 
-    ; 3. Set up a minimal GDT and IDT
-    ; Load a minimal GDT
+    ; Set up a minimal GDT and IDT
     lgdt [gdt_descriptor]
-
-    ; Load an empty IDT
     lidt [idt_descriptor]
 
     ; Set all segment registers to the data segment selector
@@ -44,26 +41,26 @@ _loader_start:
     mov gs, ax
     mov ss, ax
 
-    ; 4. Set up a 4-level paging structure
+    ; Set up a 4-level paging structure
     call setup_paging
 
-    ; 5. Enable PAE
+    ; Enable PAE
     mov eax, cr4
     or eax, 0xA0        ; CR4.PAE | CR4.PGE
     mov cr4, eax
 
-    ; 6. Enable long mode
+    ; Enable long mode
     mov ecx, 0xC0000080 ; IA32_EFER MSR
     rdmsr
     or eax, 0x900       ; EFER.LME | EFER.NXE
     wrmsr
 
-    ; 7. Enable paging
+    ; Enable paging
     mov eax, cr0
     or eax, 0x80010000  ; CR0.PG | CR0.WP
     mov cr0, eax
 
-    ; 8. Into 64-bit code segment
+    ; Into 64-bit code segment
     jmp 0x08:long_mode_entry
 
 hang:
